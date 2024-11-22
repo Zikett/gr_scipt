@@ -70,7 +70,68 @@ start_containers() {
         index=$((index + 1))
     done < wallets.txt
 }
+start_containers_with_proxy() {
+    echo -e "${YELLOW}Читаю ключи из wallets.txt и прокси из proxies.txt...${NC}"
 
+    if [ ! -f wallets.txt ]; then
+        echo -e "${RED}Файл wallets.txt не найден!${NC}"
+        exit 1
+    fi
+
+    if [ ! -f proxies.txt ]; then
+        echo -e "${RED}Файл proxies.txt не найден!${NC}"
+        exit 1
+    fi
+
+    local base_port=8000
+    local index=1
+
+    # Читаем ключи и прокси
+    paste -d "|" wallets.txt proxies.txt | while IFS="|" read -r private_key proxy_raw; do
+        if [ -z "$private_key" ] || [ -z "$proxy_raw" ]; then
+            echo -e "${YELLOW}Пропускаю пустую строку или отсутствующий прокси.${NC}"
+            continue
+        fi
+
+        # Разбиваем прокси на составляющие
+        IFS=":" read -r proxy_ip proxy_port proxy_user proxy_pass <<< "$proxy_raw"
+        if [ -z "$proxy_ip" ] || [ -z "$proxy_port" ] || [ -z "$proxy_user" ] || [ -z "$proxy_pass" ]; then
+            echo -e "${RED}Некорректный формат прокси: $proxy_raw${NC}"
+            continue
+        fi
+
+        proxy="http://$proxy_user:$proxy_pass@$proxy_ip:$proxy_port"
+
+        container_name="glacier-verifier_$index"
+        container_port=$((base_port + index))
+
+        if [ "$(docker ps -aq -f name=$container_name)" ]; then
+            echo -e "${YELLOW}Контейнер $container_name уже существует. Пропускаю создание.${NC}"
+        else
+            echo -e "${GREEN}Создаю контейнер $container_name с прокси $proxy на порту $container_port...${NC}"
+            docker run -d \
+                -e PRIVATE_KEY="$private_key" \
+                -e HTTP_PROXY="$proxy" \
+                -e HTTPS_PROXY="$proxy" \
+                -e NO_PROXY="localhost,127.0.0.1" \
+                -p $container_port:8000 \
+                --name $container_name \
+                docker.io/glaciernetwork/glacier-verifier:v0.0.1
+
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Контейнер $container_name успешно запущен.${NC}"
+            else
+                echo -e "${RED}Ошибка запуска контейнера $container_name.${NC}"
+            fi
+        fi
+
+        # Пауза между созданием контейнеров
+        echo -e "${YELLOW}Ожидание 10 секунд перед запуском следующего контейнера...${NC}"
+        sleep 10
+
+        index=$((index + 1))
+    done
+}
 # Функция для проверки логов контейнера
 check_logs() {
     echo -e "${YELLOW}Введите номер контейнера для проверки логов:${NC}"
@@ -111,12 +172,13 @@ remove_containers() {
 menu() {
     while true; do
         echo -e "\n${GREEN}Выберите действие:${NC}"
-        echo "1) Запустить контейнеры"
-        echo "2) Остановить все контейнеры"
-        echo "3) Перезапустить все контейнеры"
-        echo "4) Удалить все контейнеры"
-        echo "5) Проверить логи контейнера"
-        echo "6) Выйти"
+        echo "1) Запустить ноды"
+        echo "2) Запустить ноды с прокси"
+        echo "3) Остановить все ноды"
+        echo "4) Перезапустить все ноды"
+        echo "5) Удалить все ноды"
+        echo "6) Проверить логи ноды"
+        echo "7) Выйти"
         read -p "Введите номер действия: " choice
 
         case $choice in
@@ -124,18 +186,21 @@ menu() {
                 start_containers
                 ;;
             2)
-                stop_containers
+                start_containers_with_proxy
                 ;;
             3)
-                restart_containers
+                stop_containers
                 ;;
             4)
-                remove_containers
+                restart_containers
                 ;;
             5)
-                check_logs
+                remove_containers
                 ;;
             6)
+                check_logs
+                ;;
+            7)
                 echo -e "${YELLOW}Выход...${NC}"
                 exit 0
                 ;;
