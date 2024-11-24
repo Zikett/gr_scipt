@@ -7,9 +7,8 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 LOGFILE="/var/log/glacier_installer.log"
-exec > >(tee -a $LOGFILE) 2>&1
+exec > >(tee -a "$LOGFILE") 2>&1
 
-# Функция для проверки наличия Docker
 check_docker_installed() {
     if ! command -v docker &> /dev/null; then
         echo -e "${RED}Docker не установлен. Устанавливаю Docker...${NC}"
@@ -27,7 +26,6 @@ check_docker_installed() {
     fi
 }
 
-# Функция для запуска контейнеров
 start_containers() {
     echo -e "${YELLOW}Читаю ключи из wallets.txt...${NC}"
     if [ ! -f wallets.txt ]; then
@@ -39,6 +37,7 @@ start_containers() {
     local index=1
 
     while IFS= read -r private_key; do
+        private_key=$(echo "$private_key" | tr -d '[:space:]')
         if [ -z "$private_key" ]; then
             continue
         fi
@@ -63,13 +62,13 @@ start_containers() {
             fi
         fi
 
-        # Добавляем паузу
         echo -e "${YELLOW}Ожидание 10 секунд перед запуском следующего контейнера...${NC}"
         sleep 10
 
         index=$((index + 1))
     done < wallets.txt
 }
+
 start_containers_with_proxy() {
     echo -e "${YELLOW}Читаю ключи из wallets.txt и прокси из proxies.txt...${NC}"
 
@@ -86,14 +85,13 @@ start_containers_with_proxy() {
     local base_port=8000
     local index=1
 
-    # Читаем ключи и прокси
     paste -d "|" wallets.txt proxies.txt | while IFS="|" read -r private_key proxy_raw; do
+        private_key=$(echo "$private_key" | tr -d '[:space:]')
         if [ -z "$private_key" ] || [ -z "$proxy_raw" ]; then
             echo -e "${YELLOW}Пропускаю пустую строку или отсутствующий прокси.${NC}"
             continue
         fi
 
-        # Разбиваем прокси на составляющие
         IFS=":" read -r proxy_ip proxy_port proxy_user proxy_pass <<< "$proxy_raw"
         if [ -z "$proxy_ip" ] || [ -z "$proxy_port" ] || [ -z "$proxy_user" ] || [ -z "$proxy_pass" ]; then
             echo -e "${RED}Некорректный формат прокси: $proxy_raw${NC}"
@@ -125,14 +123,13 @@ start_containers_with_proxy() {
             fi
         fi
 
-        # Пауза между созданием контейнеров
         echo -e "${YELLOW}Ожидание 10 секунд перед запуском следующего контейнера...${NC}"
         sleep 10
 
         index=$((index + 1))
     done
 }
-# Функция для проверки логов контейнера
+
 check_logs() {
     echo -e "${YELLOW}Введите номер контейнера для проверки логов:${NC}"
     read -p "Номер контейнера: " container_number
@@ -141,34 +138,30 @@ check_logs() {
 
     if [ "$(docker ps -aq -f name=$container_name)" ]; then
         echo -e "${GREEN}Логи контейнера $container_name:${NC}"
-        docker logs $container_name
+        docker logs "$container_name"
     else
         echo -e "${RED}Контейнер $container_name не найден.${NC}"
     fi
 }
 
-# Функция для остановки всех контейнеров
 stop_containers() {
     echo -e "${YELLOW}Останавливаю все контейнеры Glacier...${NC}"
     docker ps -q --filter "name=glacier-verifier" | xargs -r docker stop
     echo -e "${GREEN}Все контейнеры остановлены.${NC}"
 }
 
-# Функция для перезапуска всех контейнеров
 restart_containers() {
     echo -e "${YELLOW}Перезапускаю все контейнеры Glacier...${NC}"
     docker ps -q --filter "name=glacier-verifier" | xargs -r docker restart
     echo -e "${GREEN}Все контейнеры перезапущены.${NC}"
 }
 
-# Функция для удаления всех контейнеров
 remove_containers() {
     echo -e "${YELLOW}Удаляю все контейнеры Glacier...${NC}"
     docker ps -aq --filter "name=glacier-verifier" | xargs -r docker rm -f
     echo -e "${GREEN}Все контейнеры удалены.${NC}"
 }
 
-# Меню управления
 menu() {
     while true; do
         echo -e "\n${GREEN}Выберите действие:${NC}"
@@ -211,6 +204,5 @@ menu() {
     done
 }
 
-# Основная логика
 check_docker_installed
 menu
