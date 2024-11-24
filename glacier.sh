@@ -53,7 +53,7 @@ start_containers() {
                 -e PRIVATE_KEY="$private_key" \
                 -p $container_port:8000 \
                 --name $container_name \
-                docker.io/glaciernetwork/glacier-verifier:v0.0.1
+                docker.io/glaciernetwork/glacier-verifier:v0.0.2
 
             if [ $? -eq 0 ]; then
                 echo -e "${GREEN}Контейнер $container_name успешно запущен.${NC}"
